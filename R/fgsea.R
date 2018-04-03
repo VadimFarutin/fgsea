@@ -47,12 +47,30 @@ calcGseaStat <- function(stats, selectedStats, gseaParam=1,
 
 
     tops <- rCumSum - (S - seq_along(S)) / (N - m)
-    if (NR == 0) {
-        # this is equivalent to rAdj being rep(eps, m)
-        bottoms <- tops - 1 / m
+
+    # if (NR == 0) {
+    #     # this is equivalent to rAdj being rep(eps, m)
+    #     bottoms <- tops - 1 / m
+    # } else {
+    #     bottoms <- tops - rAdj / NR
+    # }
+
+    blockTops <- tops[S[-which(r[S] == r[S + 1])]]
+
+    rS <- r[S]
+    SPrev <- S - 1
+    if (SPrev[1] == 0) {
+        rS <- rS[-1]
+        notBlockBeginnings <- which(rS == r[SPrev]) + 1
     } else {
-        bottoms <- tops - rAdj / NR
+        notBlockBeginnings <- which(rS == r[SPrev])
     }
+
+    blockBeginningsIdx <- S[-notBlockBeginnings]
+    blockBottoms <- tops[which(S == blockBeginningsIdx)] - rAdj[which(S == blockBeginningsIdx)] / NR
+
+    tops <- blockTops
+    bottoms <- blockBottoms
 
     maxP <- max(tops)
     minP <- min(bottoms)
