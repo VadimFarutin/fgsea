@@ -29,7 +29,21 @@ calcGseaStat <- function(stats, selectedStats, gseaParam=1,
     r <- stats
     p <- gseaParam
 
-    S <- sort(S)
+    # Moving existing genes to the end of their block
+
+    # Each gene is paired with 1 if was selected, 0 otherwise
+    existed <- mapply(c, r[S], 1)
+    missed <- mapply(c, r[-S], 0)
+    all <- cbind(existed, missed)
+
+    # Genes sorted descendingly, selected pairs in the end of corresponding block
+    sortedOrder <- order(-all[1, ], all[2, ])
+    all <- mapply(c, all[1, sortedOrder], all[2, sortedOrder], SIMPLIFY = FALSE)
+
+    # Taking indexes of genes which were selected (they are paired with 0)
+    S <- which(rapply(all, function(x) x[2]) == 1)
+
+    # Calculating cumulative statistics
 
     m <- length(S)
     N <- length(r)
@@ -45,32 +59,51 @@ calcGseaStat <- function(stats, selectedStats, gseaParam=1,
         rCumSum <- cumsum(rAdj) / NR
     }
 
+    # Calculating tops values
 
     tops <- rCumSum - (S - seq_along(S)) / (N - m)
 
-    # if (NR == 0) {
-    #     # this is equivalent to rAdj being rep(eps, m)
-    #     bottoms <- tops - 1 / m
-    # } else {
-    #     bottoms <- tops - rAdj / NR
-    # }
-
-    blockTops <- tops[S[-which(r[S] == r[S + 1])]]
-
-    rS <- r[S]
-    SPrev <- S - 1
-    if (SPrev[1] == 0) {
-        rS <- rS[-1]
-        notBlockBeginnings <- which(rS == r[SPrev]) + 1
+    # Only genes at the end of each block are left
+    # Some of them may be not real tops (if diagonal of a block has negative angle),
+    # such points does not affect answer though
+    notBlockEndIdxs <- which(r[S[-length(S)]] == r[S[-1]])
+    if (length(notBlockEndIdxs) != 0) {
+        blockEndValues <- tops[-notBlockEndIdxs]
+        S <- S[-notBlockEndIdxs]
     } else {
-        notBlockBeginnings <- which(rS == r[SPrev])
+        blockEndValues <- tops
     }
 
-    blockBeginningsIdx <- S[-notBlockBeginnings]
-    blockBottoms <- tops[which(S == blockBeginningsIdx)] - rAdj[which(S == blockBeginningsIdx)] / NR
+    tops <- blockEndValues
 
-    tops <- blockTops
-    bottoms <- blockBottoms
+    # Calculating bottoms values
+
+    # Taking blocks beginnings indexes (indexes of end of the previous block actually)
+    blockBeginIdxs <- which(rapply(all[-1], function(x) x[1])
+                            != rapply(all[-length(all)], function(x) x[1]))
+
+    # We can omit beginnings of blocks from which there are no genes in S
+    # (from several bottoms in a row without tops we will take only last one)
+    blockBeginIdxs <- blockBeginIdxs[which(blockBeginIdxs[-1] %in% S)]
+
+    if (r[S[1]] != r[1]) {
+        blockEndValues <- c(0, blockEndValues)
+        S <- c(0, S)
+    }
+
+    blockBeginValues <- c(0, mapply(function(topValue, topIdx, bottomIdx) topValue - (bottomIdx - topIdx) / (N - m),
+                                    topValue = blockEndValues[-length(blockEndValues)],
+                                    topIdx = S[-length(S)],
+                                    bottomIdx = blockBeginIdxs))
+
+    if (S[1] == 0) {
+        blockEndValues <- blockEndValues[-1]
+        S <- S[-1]
+    }
+
+    bottoms <- blockBeginValues
+
+    # Calculating enrichment score and returning results
 
     maxP <- max(tops)
     minP <- min(bottoms)
@@ -89,19 +122,22 @@ calcGseaStat <- function(stats, selectedStats, gseaParam=1,
 
     res <- list(res=geneSetStatistic)
     if (returnAllExtremes) {
-        res <- c(res, list(tops=tops, bottoms=bottoms))
+        res <- c(res, list(tops=tops, bottoms=bottoms, selectedStats=S))
     }
     if (returnLeadingEdge) {
+        sorted <- sort(selectedStats)
+
         leadingEdge <- if (maxP > -minP) {
-            S[seq_along(S) <= which.max(bottoms)]
+            sorted[which(sorted <= blockBeginIdxs[which.max(bottoms) - 1])]
         } else if (maxP < -minP) {
-            rev(S[seq_along(S) >= which.min(bottoms)])
+            rev(sorted[which(sorted >= blockBeginIdxs[which.min(bottoms) - 1])])
         } else {
             NULL
         }
 
         res <- c(res, list(leadingEdge=leadingEdge))
     }
+
     res
 }
 
