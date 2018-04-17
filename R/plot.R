@@ -125,6 +125,7 @@ plotEnrichment <- function(pathway, stats,
 
     bottoms <- gseaRes$bottoms
     tops <- gseaRes$tops
+    pathway <- gseaRes$selectedStats
 
     n <- length(statsAdj)
     xs <- as.vector(rbind(pathway - 1, pathway))
