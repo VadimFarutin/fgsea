@@ -73,7 +73,14 @@ test_that("fgseaLabel works", {
                      sample(rownames(mat), 200))
 
     fgseaRes <- fgseaLabel(pathways, mat, labels, nperm = 1000, minSize = 15, maxSize = 500)
+    expect_true(!is.null(fgseaRes))
+})
 
+test_that("fgseaLabel example works", {
+    skip_on_bioc()
+    skip_on_travis() # not working on travis for some reason, check later (2018-04-10)
+    example("fgseaLabel", run.donttest = TRUE, local = FALSE)
+    expect_true(!is.null(fgseaRes))
 })
 
 test_that("Ties detection in ranking works", {

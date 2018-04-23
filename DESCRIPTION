@@ -1,6 +1,6 @@
 Package: fgsea
 Title: Fast Gene Set Enrichment Analysis
-Version: 1.5.1.9000
+Version: 1.5.3
 Date: 2018-02-21
 Authors@R: person("Alexey", "Sergushichev", email = "alsergbox@gmail.com", role = c("aut", "cre"))
 Description: The package implements an algorithm for fast gene set enrichment
@@ -28,7 +28,10 @@ Suggests:
     rmarkdown,
     reactome.db,
     AnnotationDbi,
-    parallel
+    parallel,
+    org.Mm.eg.db,
+    limma,
+    GEOquery
 License: MIT + file LICENCE
 LazyData: true
 LinkingTo: Rcpp
