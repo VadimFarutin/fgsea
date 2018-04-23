@@ -22,43 +22,57 @@
 #' ranks <- sort(exampleRanks, decreasing=TRUE)
 #' es <- calcGseaStat(ranks, na.omit(match(examplePathways[[1]], names(ranks))))
 calcGseaStat <- function(stats, selectedStats, gseaParam=1,
-                         gene2block=NULL,
                          blockEps=0,
                          returnAllExtremes=FALSE,
                          returnLeadingEdge=FALSE) {
 
-    S <- selectedStats
-    r <- stats
-    p <- gseaParam
+    geneToBlock <- cumsum(c(FALSE, stats[-length(stats)] - stats[-1] > blockEps)) + 1
+    statsAdj <- abs(stats)^gseaParam
 
-    S <- sort(S)
+    all <- rle(geneToBlock)
+    blocksCounts <- all$lengths
+    blocksValues <- statsAdj[cumsum(blocksCounts)]
 
-    if (is.null(gene2block)) {
-        gene2block <- cumsum(c(FALSE, r[-length(r)] - r[-1] > blockEps)) + 1
-    }
+    calcGseaStatImpl(statsAdj,
+                     selectedStats,
+                     blocksCounts,
+                     blocksValues,
+                     geneToBlock,
+                     returnAllExtremes,
+                     returnLeadingEdge)
+}
 
-    all <- rle(gene2block)
-    allBlocksCounts <- all$lengths
-    allBlocksValues <- r[cumsum(allBlocksCounts)]
+calcGseaStatImpl <- function(statsAdj,
+                             selectedStats,
+                             blocksCounts,
+                             blocksValues,
+                             geneToBlock,
+                             returnAllExtremes=FALSE,
+                             returnLeadingEdge=FALSE) {
 
-    selected <- rle(gene2block[S])
+    selectedStats <- sort(selectedStats)
+
+    selected <- rle(geneToBlock[selectedStats])
     selectedBlocksCounts <- selected$lengths
     selectedBlocksIdxs <- selected$values
-    selectedBlocksValues <- allBlocksValues[selectedBlocksIdxs]
+    selectedBlocksValues <- blocksValues[selectedBlocksIdxs]
 
-    #equalCnt <- which(allBlocksCounts > 1)
-    #expect_equal(length(equalCnt), 0)
+    # equalCnt <- which(blocksCounts > 1)
+    # if (length(equalCnt) > 0) {
+    #     breakpoint <- 1
+    # }
+    # expect_equal(length(equalCnt), 0)
 
     # Calculating cumulative statistics
 
-    m <- length(S)
-    N <- length(r)
+    m <- length(selectedStats)
+    N <- length(statsAdj)
 
     if (m == N) {
         stop("GSEA statistic is not defined when all genes are selected")
     }
 
-    rAdj <- abs(selectedBlocksValues)^p * selectedBlocksCounts
+    rAdj <- selectedBlocksValues * selectedBlocksCounts
     NR <- sum(rAdj)
 
     if (NR == 0) {
@@ -70,7 +84,7 @@ calcGseaStat <- function(stats, selectedStats, gseaParam=1,
 
     # Calculating tops values
 
-    tops <- rCumSum - ((cumsum(allBlocksCounts))[selectedBlocksIdxs] - cumsum(selectedBlocksCounts)) / (N - m)
+    tops <- rCumSum - ((cumsum(blocksCounts))[selectedBlocksIdxs] - cumsum(selectedBlocksCounts)) / (N - m)
 
     # Calculating bottoms values
 
@@ -81,7 +95,7 @@ calcGseaStat <- function(stats, selectedStats, gseaParam=1,
         bottoms <- tops - rAdj / NR
     }
 
-    bottoms <- bottoms + (allBlocksCounts[selectedBlocksIdxs] - selectedBlocksCounts) / (N - m)
+    bottoms <- bottoms + (blocksCounts[selectedBlocksIdxs] - selectedBlocksCounts) / (N - m)
 
     # Calculating enrichment score and returning results
 
@@ -102,15 +116,13 @@ calcGseaStat <- function(stats, selectedStats, gseaParam=1,
 
     res <- list(res=geneSetStatistic)
     if (returnAllExtremes) {
-        res <- c(res, list(tops=tops, bottoms=bottoms, selectedStats=(cumsum(allBlocksCounts))[selectedBlocksIdxs]))
+        res <- c(res, list(tops=tops, bottoms=bottoms, selectedStats=(cumsum(blocksCounts))[selectedBlocksIdxs]))
     }
     if (returnLeadingEdge) {
-        sorted <- sort(selectedStats)
-
         leadingEdge <- if (maxP > -minP) {
-            sorted[which(sorted <= (cumsum(allBlocksCounts))[which.max(tops)])]
+            selectedStats[which(selectedStats <= (cumsum(blocksCounts))[selectedBlocksIdxs[which.max(tops)]])]
         } else if (maxP < -minP) {
-            rev(sorted[which(sorted >= (cumsum(allBlocksCounts))[which.min(bottoms) - 1])])
+            rev(selectedStats[which(selectedStats > (cumsum(blocksCounts))[selectedBlocksIdxs[which.min(bottoms) - 1]])])
         } else {
             NULL
         }
@@ -206,6 +218,8 @@ fgsea <- function(pathways, stats, nperm,
     minSize <- max(minSize, 1)
     stats <- sort(stats, decreasing=TRUE)
 
+    geneToBlock <- cumsum(c(FALSE, stats[-length(stats)] - stats[-1] > 1e-15)) + 1
+
     stats <- abs(stats) ^ gseaParam
     pathwaysFiltered <- lapply(pathways, function(p) { as.vector(na.omit(fmatch(p, names(stats)))) })
     pathwaysSizes <- sapply(pathwaysFiltered, length)
@@ -229,12 +243,16 @@ fgsea <- function(pathways, stats, nperm,
 
     K <- max(pathwaysSizes)
 
-    gene2block <- cumsum(c(FALSE, stats[-length(stats)] - stats[-1] > 1e-15)) + 1
+    all <- rle(geneToBlock)
+    blocksCounts <- all$lengths
+    blocksValues <- stats[cumsum(blocksCounts)]
 
     gseaStatRes <- do.call(rbind,
-                lapply(pathwaysFiltered, calcGseaStat,
-                       stats=stats,
-                       gene2block=gene2block,
+                lapply(pathwaysFiltered, calcGseaStatImpl,
+                       statsAdj=stats,
+                       blocksCounts=blocksCounts,
+                       blocksValues=blocksValues,
+                       geneToBlock=geneToBlock,
                        returnLeadingEdge=TRUE))
 
 
@@ -256,11 +274,12 @@ fgsea <- function(pathways, stats, nperm,
         if (m == 1) {
             for (i in seq_len(nperm1)) {
                 randSample <- sample.int(length(universe), K)
-                randEsP <- calcGseaStat(
-                    stats = stats,
+                randEsP <- calcGseaStatImpl(
+                    statsAdj = stats,
                     selectedStats = randSample,
-                    gene2block=gene2block,
-                    gseaParam = 1)
+                    blocksCounts = blocksCounts,
+                    blocksValues = blocksValues,
+                    geneToBlock = geneToBlock)
                 leEs <- leEs + (randEsP <= pathwayScores)
                 geEs <- geEs + (randEsP >= pathwayScores)
                 leZero <- leZero + (randEsP <= 0)
@@ -455,6 +474,9 @@ fgseaLabel <- function(pathways, mat, labels, nperm,
 
     universe <- seq_along(stats)
 
+    # calcGseaStatBatchCppFun <- calcGseaStatBatchCpp
+    # calcGseaStatBatchFun <- calcGseaStatBatch
+
     counts <- bplapply(seq_along(permPerProc), function(i) {
         nperm1 <- permPerProc[i]
 
@@ -464,14 +486,17 @@ fgseaLabel <- function(pathways, mat, labels, nperm,
         randEsPs <- lapply(seq_len(nperm1), function(i) {
             randCorRanks1 <- randCorRanks[, i]
             ranksOrder <- sort.list(randCorRanks1, decreasing=TRUE)
-            geneRanks <- invPerm(ranksOrder)
+            geneRanks <- Matrix:::invPerm(ranksOrder)
             stats <- randCorRanks1[ranksOrder]
 
-            randEsP <- calcGseaStatBatch(
+            randEsP <- calcGseaStatBatchFun(
                 stats = stats,
                 selectedStats = pathwaysFiltered,
                 geneRanks = geneRanks,
                 gseaParam = gseaParam)
+
+            # statsAdj <- abs(stats)^gseaParam
+            # randEsP <- calcGseaStatBatchCppFun(statsAdj, pathwaysFiltered, geneRanks)
         })
 
         randEsPs <- do.call(cbind, randEsPs)
