@@ -126,9 +126,10 @@ plotEnrichment <- function(pathway, stats,
     bottoms <- gseaRes$bottoms
     tops <- gseaRes$tops
     pathway <- gseaRes$selectedStats
+    bottomCoordinates <- gseaRes$bottomCoordinates
 
     n <- length(statsAdj)
-    xs <- as.vector(rbind(pathway - 1, pathway))
+    xs <- as.vector(rbind(bottomCoordinates, pathway))
     ys <- as.vector(rbind(bottoms, tops))
     toPlot <- data.frame(x=c(0, xs, n + 1), y=c(0, ys, 0))
 
