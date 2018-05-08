@@ -59,3 +59,41 @@ test_that("calcGseaStats returns correct new selectedStats", {
 
     expect_equal(res$selectedStats, correctSelectedStats)
 })
+
+test_that("plotEnrichment supports stats with equal ranks", {
+    statsWithTies <- c(5, 1, 1, 1, 1, -1, -1, -1, -5)
+    sample1 <- c(2, 3, 6, 7)
+    sample2 <- c(4, 5, 6, 7)
+
+    expect_equal(statsWithTies[sample1], statsWithTies[sample2])
+    expect_equal(calcGseaStat(statsWithTies, selectedStats = sample1),
+                 calcGseaStat(statsWithTies, selectedStats = sample2))
+
+    p1 <- plotEnrichment(as.character(sample1), setNames(statsWithTies, as.character(seq_along(statsWithTies))))
+    p2 <- plotEnrichment(as.character(sample2), setNames(statsWithTies, as.character(seq_along(statsWithTies))))
+
+    expect_equal(p1, p2)
+
+    # oldPlotPath <- "./../../old_plot.svg"
+    #
+    # oldPlotFile <- file(oldPlotPath, "rb")
+    # oldPlotInfo <- file.info(oldPlotPath)
+    #
+    # oldSize <- oldPlotInfo$size
+    # oldData <- readBin(oldPlotFile, integer(), size = 1, n = oldSize)
+    #
+    # close(oldPlotFile)
+    #
+    #
+    # newPlotPath <- "./../../new_plot.svg"
+    #
+    # newPlotFile <- file(newPlotPath, "rb")
+    # newPlotInfo <- file.info(newPlotPath)
+    #
+    # newSize <- newPlotInfo$size
+    # newData <- readBin(newPlotFile, integer(), size = 1, n = newSize)
+    #
+    # close(newPlotFile)
+    #
+    # expect_equal(oldData, newData)
+})
