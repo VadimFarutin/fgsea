@@ -52,7 +52,6 @@ test_that("calcGseaStats returns zero when both sides are equally enriched", {
 })
 
 test_that("calcGseaStats* work with zero gene-level stat", {
-
     expect_equal(
         calcGseaStat(c(10:1, 0, -1:-20), selectedStats = 11, 1),
         calcGseaStat(c(10:1, -1e-9, -1:-20), selectedStats = 11, 1))
@@ -73,6 +72,7 @@ test_that("calcGseaStats* work with zero gene-level stat", {
 test_that("calcGseaStatsCumulative works", {
     set.seed(42)
     stats <- rnorm(100)
+    stats <- sort(stats, decreasing = TRUE)
     sample <- sample(seq_along(stats), 10)
     ess <- calcGseaStatCumulative(stats, selectedStats = sample, gseaParam = 1)
     for (i in seq_along(sample)) {
