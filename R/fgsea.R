@@ -22,57 +22,56 @@
 #' ranks <- sort(exampleRanks, decreasing=TRUE)
 #' es <- calcGseaStat(ranks, na.omit(match(examplePathways[[1]], names(ranks))))
 calcGseaStat <- function(stats, selectedStats, gseaParam=1,
-                         blockEps=0,
+                         groupEps=0,
                          returnAllExtremes=FALSE,
                          returnLeadingEdge=FALSE) {
 
-    geneToBlock <- cumsum(c(FALSE, stats[-length(stats)] - stats[-1] > blockEps)) + 1
+    geneToGroup <- cumsum(c(FALSE, stats[-length(stats)] - stats[-1] > groupEps)) + 1
     statsAdj <- abs(stats)^gseaParam
 
-    all <- rle(geneToBlock)
-    blocksCounts <- all$lengths
-    blocksValues <- statsAdj[cumsum(blocksCounts)]
+    all <- rle(geneToGroup)
+    groupCounts <- all$lengths
+    groupEnds <- cumsum(groupCounts)
+    groupValues <- statsAdj[groupEnds]
 
-    calcGseaStatImpl(statsAdj,
-                     selectedStats,
-                     blocksCounts,
-                     blocksValues,
-                     geneToBlock,
+    calcGseaStatImpl(selectedStats,
+                     groupEnds,
+                     groupValues,
+                     geneToGroup,
                      returnAllExtremes,
                      returnLeadingEdge)
 }
 
-calcGseaStatImpl <- function(statsAdj,
-                             selectedStats,
-                             blocksCounts,
-                             blocksValues,
-                             geneToBlock,
+#' @param selectedStats Indexes of selected genes in the `stats` array.
+#' @param groupEnds Indexes of the end of each group of genes in gene statistics.
+#' @param groupValues Values of genes in each group of genes in gene statistics.
+#' @param geneToGroup Maps index of gene to the group index
+#' @param returnAllExtremes If TRUE return not only the most extreme point, but all of them. Can be used for enrichment plot
+#' @param returnLeadingEdge If TRUE return also leading edge genes.
+calcGseaStatImpl <- function(selectedStats,
+                             groupEnds,
+                             groupValues,
+                             geneToGroup,
                              returnAllExtremes=FALSE,
                              returnLeadingEdge=FALSE) {
 
     selectedStats <- sort(selectedStats)
 
-    selected <- rle(geneToBlock[selectedStats])
-    selectedBlocksCounts <- selected$lengths
-    selectedBlocksIdxs <- selected$values
-    selectedBlocksValues <- blocksValues[selectedBlocksIdxs]
-
-    # equalCnt <- which(blocksCounts > 1)
-    # if (length(equalCnt) > 0) {
-    #     breakpoint <- 1
-    # }
-    # expect_equal(length(equalCnt), 0)
+    selected <- rle(geneToGroup[selectedStats])
+    selectedGroupCounts <- selected$lengths
+    selectedGroupIdxs <- selected$values
+    selectedGroupValues <- groupValues[selectedGroupIdxs]
 
     # Calculating cumulative statistics
 
     m <- length(selectedStats)
-    N <- length(statsAdj)
+    N <- groupEnds[length(groupEnds)]
 
     if (m == N) {
         stop("GSEA statistic is not defined when all genes are selected")
     }
 
-    rAdj <- selectedBlocksValues * selectedBlocksCounts
+    rAdj <- selectedGroupValues * selectedGroupCounts
     NR <- sum(rAdj)
 
     if (NR == 0) {
@@ -84,18 +83,23 @@ calcGseaStatImpl <- function(statsAdj,
 
     # Calculating tops values
 
-    tops <- rCumSum - ((cumsum(blocksCounts))[selectedBlocksIdxs] - cumsum(selectedBlocksCounts)) / (N - m)
+    tops <- rCumSum - (groupEnds[selectedGroupIdxs] - cumsum(selectedGroupCounts)) / (N - m)
 
     # Calculating bottoms values
 
     if (NR == 0) {
         # this is equivalent to rAdj being rep(eps, m)
-        bottoms <- tops - selectedBlocksCounts / length(rAdj)
+        bottoms <- tops - selectedGroupCounts / length(rAdj)
     } else {
         bottoms <- tops - rAdj / NR
     }
 
-    bottoms <- bottoms + (blocksCounts[selectedBlocksIdxs] - selectedBlocksCounts) / (N - m)
+    prevGroupEnds <- groupEnds[selectedGroupIdxs - 1]
+    if (selectedGroupIdxs[1] == 1) {
+        prevGroupEnds <- c(0, prevGroupEnds)
+    }
+
+    bottoms <- bottoms + (groupEnds[selectedGroupIdxs] - prevGroupEnds - selectedGroupCounts) / (N - m)
 
     # Calculating enrichment score and returning results
 
@@ -116,13 +120,16 @@ calcGseaStatImpl <- function(statsAdj,
 
     res <- list(res=geneSetStatistic)
     if (returnAllExtremes) {
-        res <- c(res, list(tops=tops, bottoms=bottoms, selectedStats=(cumsum(blocksCounts))[selectedBlocksIdxs]))
+        res <- c(res, list(tops=tops, bottoms=bottoms, selectedStats=groupEnds[selectedGroupIdxs],
+                           bottomCoordinates=groupEnds[selectedGroupIdxs - 1]))
     }
     if (returnLeadingEdge) {
         leadingEdge <- if (maxP > -minP) {
-            selectedStats[which(selectedStats <= (cumsum(blocksCounts))[selectedBlocksIdxs[which.max(tops)]])]
+            selectedStats[which(selectedStats <= groupEnds[selectedGroupIdxs[which.max(tops)]])]
         } else if (maxP < -minP) {
-            rev(selectedStats[which(selectedStats > (cumsum(blocksCounts))[selectedBlocksIdxs[which.min(bottoms) - 1]])])
+            bottomPos <- which.min(bottoms)
+            leadingEdgeBound <- ifelse(bottomPos == 1, 1, groupEnds[selectedGroupIdxs[which.min(bottoms) - 1]] + 1)
+            rev(selectedStats[which(selectedStats >= leadingEdgeBound)])
         } else {
             NULL
         }
@@ -218,7 +225,7 @@ fgsea <- function(pathways, stats, nperm,
     minSize <- max(minSize, 1)
     stats <- sort(stats, decreasing=TRUE)
 
-    geneToBlock <- cumsum(c(FALSE, stats[-length(stats)] - stats[-1] > 1e-15)) + 1
+    geneToGroup <- cumsum(c(FALSE, stats[-length(stats)] - stats[-1] > 1e-15)) + 1
 
     stats <- abs(stats) ^ gseaParam
     pathwaysFiltered <- lapply(pathways, function(p) { as.vector(na.omit(fmatch(p, names(stats)))) })
@@ -243,16 +250,16 @@ fgsea <- function(pathways, stats, nperm,
 
     K <- max(pathwaysSizes)
 
-    all <- rle(geneToBlock)
-    blocksCounts <- all$lengths
-    blocksValues <- stats[cumsum(blocksCounts)]
+    all <- rle(geneToGroup)
+    groupCounts <- all$lengths
+    groupEnds <- cumsum(groupCounts)
+    groupValues <- stats[groupEnds]
 
     gseaStatRes <- do.call(rbind,
                 lapply(pathwaysFiltered, calcGseaStatImpl,
-                       statsAdj=stats,
-                       blocksCounts=blocksCounts,
-                       blocksValues=blocksValues,
-                       geneToBlock=geneToBlock,
+                       groupEnds=groupEnds,
+                       groupValues=groupValues,
+                       geneToGroup=geneToGroup,
                        returnLeadingEdge=TRUE))
 
 
@@ -275,11 +282,10 @@ fgsea <- function(pathways, stats, nperm,
             for (i in seq_len(nperm1)) {
                 randSample <- sample.int(length(universe), K)
                 randEsP <- calcGseaStatImpl(
-                    statsAdj = stats,
                     selectedStats = randSample,
-                    blocksCounts = blocksCounts,
-                    blocksValues = blocksValues,
-                    geneToBlock = geneToBlock)
+                    groupEnds = groupEnds,
+                    groupValues = groupValues,
+                    geneToGroup = geneToGroup)
                 leEs <- leEs + (randEsP <= pathwayScores)
                 geEs <- geEs + (randEsP >= pathwayScores)
                 leZero <- leZero + (randEsP <= 0)
@@ -490,7 +496,7 @@ fgseaLabel <- function(pathways, mat, labels, nperm,
             geneRanks <- Matrix:::invPerm(ranksOrder)
             stats <- randCorRanks1[ranksOrder]
 
-            randEsP <- calcGseaStatBatchFun(
+            randEsP <- calcGseaStatBatch(
                 stats = stats,
                 selectedStats = pathwaysFiltered,
                 geneRanks = geneRanks,
