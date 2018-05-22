@@ -8,6 +8,8 @@ using namespace std;
 // [[Rcpp::export]]
 List calcGseaStatCumulativeBatch(
         NumericVector const& stats,
+        IntegerVector const& geneToGroup,
+        IntegerVector const& groupEnds,
         double gseaParam,
         NumericVector const& pathwayScores,
         IntegerVector const& pathwaysSizes,
@@ -33,7 +35,9 @@ List calcGseaStatCumulativeBatch(
 NumericVector calcGseaStatCumulative(
         NumericVector const& stats,
         IntegerVector const& selectedStats, // Indexes start from one!
-        double gseaParam
+        double gseaParam,
+        IntegerVector const& geneToGroup,
+        IntegerVector const& groupEnds
 );
 
 //' Calculates GSEA statistic valus for all gene sets in `selectedStats` list.

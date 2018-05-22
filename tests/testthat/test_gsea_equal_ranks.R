@@ -100,3 +100,18 @@ test_that("plotEnrichment supports stats with equal ranks", {
 
     expect_equal(oldData, newData)
 })
+
+test_that("calcGseaStatsCumulative supports equal ranks", {
+    stats <- c(5, 1, 1, 1, 1, -1, -1, -1, -5)
+    sample1 <- c(3, 6, 2, 7, 9, 5, 4, 1)
+
+    groupInfo <- distinguishGroups(stats, 1e-15)
+
+    ess <- calcGseaStatCumulative(stats, sample1, gseaParam = 1,
+                                  geneToGroup = groupInfo$geneToGroup,
+                                  groupEnds = groupInfo$groupEnds)
+
+    for (i in seq_along(sample1)) {
+        expect_equal(ess[i], calcGseaStat(stats, sample1[seq_len(i)]))
+    }
+})

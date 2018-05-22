@@ -120,8 +120,17 @@ plotEnrichment <- function(pathway, stats,
     pathway <- unname(as.vector(na.omit(match(pathway, names(statsAdj)))))
     pathway <- sort(pathway)
 
-    gseaRes <- calcGseaStat(statsAdj, selectedStats = pathway,
-                            returnAllExtremes = TRUE)
+    groupInfo <- distinguishGroups(statsAdj, 1e-15)
+    groupValuesAdj <- abs(groupInfo$groupValues)
+
+    selected <- rle(groupInfo$geneToGroup[pathway])
+    selectedGroupCounts <- selected$lengths
+
+    gseaRes <- calcGseaStatImpl(pathway,
+                                groupInfo$groupEnds,
+                                groupValuesAdj,
+                                groupInfo$geneToGroup,
+                                returnAllExtremes = TRUE)
 
     bottoms <- gseaRes$bottoms
     tops <- gseaRes$tops
