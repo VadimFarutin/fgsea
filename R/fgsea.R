@@ -26,18 +26,13 @@ calcGseaStat <- function(stats, selectedStats, gseaParam=1,
                          returnAllExtremes=FALSE,
                          returnLeadingEdge=FALSE) {
 
-    geneToGroup <- cumsum(c(FALSE, stats[-length(stats)] - stats[-1] > groupEps)) + 1
-    statsAdj <- abs(stats)^gseaParam
-
-    all <- rle(geneToGroup)
-    groupCounts <- all$lengths
-    groupEnds <- cumsum(groupCounts)
-    groupValues <- statsAdj[groupEnds]
+    groupInfo <- distinguishGroups(stats, groupEps)
+    groupValuesAdj <- abs(groupInfo$groupValues) ^ gseaParam
 
     calcGseaStatImpl(selectedStats,
-                     groupEnds,
-                     groupValues,
-                     geneToGroup,
+                     groupInfo$groupEnds,
+                     groupValuesAdj,
+                     groupInfo$geneToGroup,
                      returnAllExtremes,
                      returnLeadingEdge)
 }
@@ -106,9 +101,9 @@ calcGseaStatImpl <- function(selectedStats,
     maxP <- max(tops)
     minP <- min(bottoms)
 
-    if(maxP > -minP) {
+    if(maxP > -minP + 1e-15) {
         geneSetStatistic <- maxP
-    } else if (maxP < -minP) {
+    } else if (maxP + 1e-15 < -minP) {
         geneSetStatistic <- minP
     } else {
         geneSetStatistic <- 0
@@ -225,7 +220,7 @@ fgsea <- function(pathways, stats, nperm,
     minSize <- max(minSize, 1)
     stats <- sort(stats, decreasing=TRUE)
 
-    geneToGroup <- cumsum(c(FALSE, stats[-length(stats)] - stats[-1] > 1e-15)) + 1
+    groupInfo <- distinguishGroups(stats, 1e-15)
 
     stats <- abs(stats) ^ gseaParam
     pathwaysFiltered <- lapply(pathways, function(p) { as.vector(na.omit(fmatch(p, names(stats)))) })
@@ -250,16 +245,13 @@ fgsea <- function(pathways, stats, nperm,
 
     K <- max(pathwaysSizes)
 
-    all <- rle(geneToGroup)
-    groupCounts <- all$lengths
-    groupEnds <- cumsum(groupCounts)
-    groupValues <- stats[groupEnds]
+    groupValuesAdj <- abs(groupInfo$groupValues) ^ gseaParam
 
     gseaStatRes <- do.call(rbind,
                 lapply(pathwaysFiltered, calcGseaStatImpl,
-                       groupEnds=groupEnds,
-                       groupValues=groupValues,
-                       geneToGroup=geneToGroup,
+                       groupEnds=groupInfo$groupEnds,
+                       groupValues=groupValuesAdj,
+                       geneToGroup=groupInfo$geneToGroup,
                        returnLeadingEdge=TRUE))
 
 
@@ -283,9 +275,9 @@ fgsea <- function(pathways, stats, nperm,
                 randSample <- sample.int(length(universe), K)
                 randEsP <- calcGseaStatImpl(
                     selectedStats = randSample,
-                    groupEnds = groupEnds,
-                    groupValues = groupValues,
-                    geneToGroup = geneToGroup)
+                    groupEnds = groupInfo$groupEnds,
+                    groupValues = groupValuesAdj,
+                    geneToGroup = groupInfo$geneToGroup)
                 leEs <- leEs + (randEsP <= pathwayScores)
                 geEs <- geEs + (randEsP >= pathwayScores)
                 leZero <- leZero + (randEsP <= 0)
@@ -296,6 +288,8 @@ fgsea <- function(pathways, stats, nperm,
         } else {
             aux <- calcGseaStatCumulativeBatch(
                 stats = stats,
+                geneToGroup = groupInfo$geneToGroup,
+                groupEnds = groupInfo$groupEnds,
                 gseaParam = 1,
                 pathwayScores = pathwayScores,
                 pathwaysSizes = pathwaysSizes,
@@ -481,9 +475,6 @@ fgseaLabel <- function(pathways, mat, labels, nperm,
 
     universe <- seq_along(stats)
 
-    # calcGseaStatBatchCppFun <- calcGseaStatBatchCpp
-    # calcGseaStatBatchFun <- calcGseaStatBatch
-
     counts <- bplapply(seq_along(permPerProc), function(i) {
         nperm1 <- permPerProc[i]
 
@@ -493,7 +484,7 @@ fgseaLabel <- function(pathways, mat, labels, nperm,
         randEsPs <- lapply(seq_len(nperm1), function(i) {
             randCorRanks1 <- randCorRanks[, i]
             ranksOrder <- sort.list(randCorRanks1, decreasing=TRUE)
-            geneRanks <- Matrix:::invPerm(ranksOrder)
+            geneRanks <- invPerm(ranksOrder)
             stats <- randCorRanks1[ranksOrder]
 
             randEsP <- calcGseaStatBatch(
@@ -637,4 +628,17 @@ collapsePathways <- function(fgseaRes,
 
     return(list(mainPathways=names(which(is.na(parentPathways))),
                 parentPathways=parentPathways))
+}
+
+distinguishGroups <- function(stats,
+                              groupEps=0) {
+    geneToGroup <- cumsum(c(FALSE, stats[-length(stats)] - stats[-1] > groupEps)) + 1
+    all <- rle(geneToGroup)
+    groupCounts <- all$lengths
+    groupEnds <- cumsum(groupCounts)
+    groupValues <- stats[groupEnds]
+
+    return(list(geneToGroup=geneToGroup,
+                groupEnds=groupEnds,
+                groupValues=groupValues))
 }
