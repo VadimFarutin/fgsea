@@ -125,15 +125,19 @@ plotEnrichment <- function(pathway, stats,
 
     bottoms <- gseaRes$bottoms
     tops <- gseaRes$tops
-    pathway <- gseaRes$selectedStats
+    topCoordinates <- gseaRes$selectedStats
     bottomCoordinates <- gseaRes$bottomCoordinates
 
     n <- length(statsAdj)
-    xs <- as.vector(rbind(bottomCoordinates, pathway))
+    xs <- as.vector(rbind(bottomCoordinates, topCoordinates))
     ys <- as.vector(rbind(bottoms, tops))
     toPlot <- data.frame(x=c(0, xs, n + 1), y=c(0, ys, 0))
 
     diff <- (max(tops) - min(bottoms)) / 8
+
+    segments <- lapply(selectedGroupCounts, seq_len)
+    segments <- mapply("*", segments, (topCoordinates - bottomCoordinates) / selectedGroupCounts, SIMPLIFY = FALSE)
+    segments <- mapply("+", segments, bottomCoordinates)
 
     # Getting rid of NOTEs
     x=y=NULL
@@ -143,7 +147,7 @@ plotEnrichment <- function(pathway, stats,
         geom_hline(yintercept=min(bottoms), colour="red", linetype="dashed") +
         geom_hline(yintercept=0, colour="black") +
         geom_line(color="green") + theme_bw() +
-        geom_segment(data=data.frame(x=pathway),
+        geom_segment(data=data.frame(x=as.vector(segments)),
                      mapping=aes(x=x, y=-diff/2,
                                  xend=x, yend=diff/2),
                      size=0.2) +
@@ -152,6 +156,7 @@ plotEnrichment <- function(pathway, stats,
               panel.grid.minor=element_blank()) +
 
         labs(x="rank", y="enrichment score")
+    pathway=selected=NULL
     g
 }
 
