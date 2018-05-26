@@ -6,31 +6,35 @@
 using namespace Rcpp;
 
 // calcGseaStatCumulativeBatch
-List calcGseaStatCumulativeBatch(NumericVector const& stats, double gseaParam, NumericVector const& pathwayScores, IntegerVector const& pathwaysSizes, int iterations, int seed);
-RcppExport SEXP _fgsea_calcGseaStatCumulativeBatch(SEXP statsSEXP, SEXP gseaParamSEXP, SEXP pathwayScoresSEXP, SEXP pathwaysSizesSEXP, SEXP iterationsSEXP, SEXP seedSEXP) {
+List calcGseaStatCumulativeBatch(NumericVector const& stats, IntegerVector const& geneToGroup, IntegerVector const& groupEnds, double gseaParam, NumericVector const& pathwayScores, IntegerVector const& pathwaysSizes, int iterations, int seed);
+RcppExport SEXP _fgsea_calcGseaStatCumulativeBatch(SEXP statsSEXP, SEXP geneToGroupSEXP, SEXP groupEndsSEXP, SEXP gseaParamSEXP, SEXP pathwayScoresSEXP, SEXP pathwaysSizesSEXP, SEXP iterationsSEXP, SEXP seedSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< NumericVector const& >::type stats(statsSEXP);
+    Rcpp::traits::input_parameter< IntegerVector const& >::type geneToGroup(geneToGroupSEXP);
+    Rcpp::traits::input_parameter< IntegerVector const& >::type groupEnds(groupEndsSEXP);
     Rcpp::traits::input_parameter< double >::type gseaParam(gseaParamSEXP);
     Rcpp::traits::input_parameter< NumericVector const& >::type pathwayScores(pathwayScoresSEXP);
     Rcpp::traits::input_parameter< IntegerVector const& >::type pathwaysSizes(pathwaysSizesSEXP);
     Rcpp::traits::input_parameter< int >::type iterations(iterationsSEXP);
     Rcpp::traits::input_parameter< int >::type seed(seedSEXP);
-    rcpp_result_gen = Rcpp::wrap(calcGseaStatCumulativeBatch(stats, gseaParam, pathwayScores, pathwaysSizes, iterations, seed));
+    rcpp_result_gen = Rcpp::wrap(calcGseaStatCumulativeBatch(stats, geneToGroup, groupEnds, gseaParam, pathwayScores, pathwaysSizes, iterations, seed));
     return rcpp_result_gen;
 END_RCPP
 }
 // calcGseaStatCumulative
-NumericVector calcGseaStatCumulative(NumericVector const& stats, IntegerVector const& selectedStats, double gseaParam);
-RcppExport SEXP _fgsea_calcGseaStatCumulative(SEXP statsSEXP, SEXP selectedStatsSEXP, SEXP gseaParamSEXP) {
+NumericVector calcGseaStatCumulative(NumericVector const& stats, IntegerVector const& selectedStats, double gseaParam, IntegerVector const& geneToGroup, IntegerVector const& groupEnds);
+RcppExport SEXP _fgsea_calcGseaStatCumulative(SEXP statsSEXP, SEXP selectedStatsSEXP, SEXP gseaParamSEXP, SEXP geneToGroupSEXP, SEXP groupEndsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< NumericVector const& >::type stats(statsSEXP);
     Rcpp::traits::input_parameter< IntegerVector const& >::type selectedStats(selectedStatsSEXP);
     Rcpp::traits::input_parameter< double >::type gseaParam(gseaParamSEXP);
-    rcpp_result_gen = Rcpp::wrap(calcGseaStatCumulative(stats, selectedStats, gseaParam));
+    Rcpp::traits::input_parameter< IntegerVector const& >::type geneToGroup(geneToGroupSEXP);
+    Rcpp::traits::input_parameter< IntegerVector const& >::type groupEnds(groupEndsSEXP);
+    rcpp_result_gen = Rcpp::wrap(calcGseaStatCumulative(stats, selectedStats, gseaParam, geneToGroup, groupEnds));
     return rcpp_result_gen;
 END_RCPP
 }

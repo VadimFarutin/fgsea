@@ -45,14 +45,18 @@ test_that("calcGseaStats returns zero when both sides are equally enriched", {
     sample <- 10:12
     expect_equal(calcGseaStat(stats, selectedStats = sample), 0)
 
-    ess <- calcGseaStatCumulative(stats, selectedStats = sample, gseaParam = 1)
+    groupInfo <- distinguishGroups(stats)
+
+    ess <- calcGseaStatCumulative(stats, selectedStats = sample, gseaParam = 1,
+                                  geneToGroup = groupInfo$geneToGroup,
+                                  groupEnds = groupInfo$groupEnds)
+
     for (i in seq_along(sample)) {
         expect_equal(ess[i], calcGseaStat(stats, sample[seq_len(i)]))
     }
 })
 
 test_that("calcGseaStats* work with zero gene-level stat", {
-
     expect_equal(
         calcGseaStat(c(10:1, 0, -1:-20), selectedStats = 11, 1),
         calcGseaStat(c(10:1, -1e-9, -1:-20), selectedStats = 11, 1))
@@ -64,7 +68,12 @@ test_that("calcGseaStats* work with zero gene-level stat", {
     stats <- c(10:1, 0, 0, -1:-29)
     sample <- 11:13
 
-    ess <- calcGseaStatCumulative(stats, selectedStats = sample, gseaParam = 1)
+    groupInfo <- distinguishGroups(stats)
+
+    ess <- calcGseaStatCumulative(stats, selectedStats = sample, gseaParam = 1,
+                                  geneToGroup = groupInfo$geneToGroup,
+                                  groupEnds = groupInfo$groupEnds)
+
     for (i in seq_along(sample)) {
         expect_equal(ess[i], calcGseaStat(stats, sample[seq_len(i)]))
     }
@@ -73,8 +82,15 @@ test_that("calcGseaStats* work with zero gene-level stat", {
 test_that("calcGseaStatsCumulative works", {
     set.seed(42)
     stats <- rnorm(100)
+    stats <- sort(stats, decreasing = TRUE)
     sample <- sample(seq_along(stats), 10)
-    ess <- calcGseaStatCumulative(stats, selectedStats = sample, gseaParam = 1)
+
+    groupInfo <- distinguishGroups(stats)
+
+    ess <- calcGseaStatCumulative(stats, selectedStats = sample, gseaParam = 1,
+                                  geneToGroup = groupInfo$geneToGroup,
+                                  groupEnds = groupInfo$groupEnds)
+
     for (i in seq_along(sample)) {
         expect_equal(ess[i], calcGseaStat(stats, sample[seq_len(i)]))
     }
@@ -89,9 +105,9 @@ test_that("fgsea results are reproducible with set.seed", {
     epw <- lapply(examplePathways, function(a) { return(a[a %in% names(erm)]) })
     epw <- epw[sapply(epw, length) >= 5]
     set.seed(42)
-    res1 = fgsea(pathways = epw, stats = erm, minSize=15, maxSize=500, nperm=1000, nproc=0)
+    res1 = fgsea(pathways = epw, stats = erm, minSize=15, maxSize=500, nperm=200, nproc=0)
     set.seed(42)
-    res2 = fgsea(pathways = epw, stats = erm, minSize=15, maxSize=500, nperm=1000, nproc=0)
+    res2 = fgsea(pathways = epw, stats = erm, minSize=15, maxSize=500, nperm=200, nproc=0)
     epsilon <- 1e-5
     for (i in seq_along(length(res1))) {
       expect_lte(abs(res1[i]$pval / res2[i]$pval - 1), epsilon)

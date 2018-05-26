@@ -3,6 +3,7 @@ using namespace Rcpp;
 
 #include <iostream>
 #include <vector>
+#include <map>
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -66,11 +67,13 @@ class SegmentTree {
 template <class T>
 class IndirectCmp {
     public:
-        IndirectCmp(T const & x) : x(x) { }
+        IndirectCmp(T const & x)
+            : x(x) { }
 
-    bool operator() (int i, int j) {
-        return x[i] < x[j];
-    }
+        bool operator() (int i, int j) {
+            return x[i] < x[j];
+        }
+
     private:
         T const & x;
 };
@@ -167,6 +170,11 @@ NumericVector gseaStats1(
 
     for (int i = 0; i < k; ++i) {
         int t = selectedStats[i] - 1;
+
+        // if (t < 0 || t >= stats.size()) {
+        //     return res;
+        // }
+
         double xx = abs(stats[t]);
         if (xx > 0) {
             statEps = min(xx, statEps);
@@ -179,6 +187,11 @@ NumericVector gseaStats1(
         int tRank = selectedRanks[i];
         // cout << tRank << ":\n";
         // 0 values make problems, replacing with epsilon
+
+        // if (t < 0 || t >= stats.size()) {
+        //     return res;
+        // }
+
         double adjStat = pow(max(abs(stats[t]), statEps), gseaParam);
 
         xs.inc(tRank, -1);
@@ -343,13 +356,57 @@ NumericVector subvector(NumericVector const &from, IntegerVector const &indices)
 NumericVector calcGseaStatCumulative(
         NumericVector const& stats,
         IntegerVector const& selectedStats, // Indexes start from one!
-        double gseaParam
+        double gseaParam,
+        IntegerVector const& geneToGroup,
+        IntegerVector const& groupEnds
 ) {
 
-    vector<int> selectedOrder = order(selectedStats);
+    vector<int> lastGroupGene(groupEnds.size());
+    // map<int, int> lastGroupGene;
 
-    NumericVector res = gseaStats1(stats, selectedStats, selectedOrder, gseaParam);
-    NumericVector resDown = gseaStats1(stats, selectedStats, selectedOrder, gseaParam, true);
+    for (int i = 0; i < (int)selectedStats.size(); i++) {
+        int group = geneToGroup[selectedStats[i] - 1] - 1;
+        lastGroupGene[group] = groupEnds[group];
+    }
+
+    vector<int> firstGroupGene(groupEnds.size());
+    // map<int, int> firstGroupGene;
+
+    for (int i = 0; i < (int)selectedStats.size(); ++i) {
+        int group = geneToGroup[selectedStats[i] - 1] - 1;
+        firstGroupGene[group] = (group == 0 ? 1 : groupEnds[group - 1] + 1);
+    }
+
+    IntegerVector selectedMoved(selectedStats.size());
+    IntegerVector selectedMovedRev(selectedStats.size());
+
+    // int err = 0;
+    for (int i = 0; i < (int)selectedStats.size(); ++i) {
+        int group = geneToGroup[selectedStats[i] - 1] - 1;
+        selectedMoved[i] = lastGroupGene[group]--;
+        selectedMovedRev[i] = firstGroupGene[group]++;
+
+        // if (selectedMoved[i] <= 0 || selectedMoved[i] > stats.size()) {
+        //     cout << selectedMoved[i] << " " << group << "\n";
+        //     err++;
+        // }
+        //
+        // if (selectedMovedRev[i] <= 0 || selectedMovedRev[i] > stats.size()) {
+        //     cout << selectedMovedRev[i] << " ";
+        //     err++;
+        // }
+
+    }
+
+    // if (err > 0) {
+    //     cout << "err: " << err << "\n";
+    // }
+
+    vector<int> selectedOrder = order(selectedMoved);
+    vector<int> selectedOrderRev = order(selectedMovedRev);
+
+    NumericVector res = gseaStats1(stats, selectedMoved, selectedOrder, gseaParam);
+    NumericVector resDown = gseaStats1(stats, selectedMovedRev, selectedOrderRev, gseaParam, true);
 
     for (int i = 0; i < (int)selectedStats.size(); ++i) {
         if (res[i] == resDown[i]) {
@@ -358,11 +415,33 @@ NumericVector calcGseaStatCumulative(
             res[i] = -resDown[i];
         }
     }
+
+    // err = 0;
+    // for (int i = 0; i < geneToGroup.size(); i++) {
+    //     if (geneToGroup[i] != i + 1) {
+    //         // cout << "(" << geneToGroup[i] << "," << i << ") ";
+    //         err++;
+    //     }
+    // }
+    // if (err) {
+    //     // for (int i = 0; i < geneToGroup.size(); i++) {
+    //     //     cout << lastGroupGene[i] << " ";
+    //     // }
+    //     for (int i = 0; i < (int)selectedStats.size(); ++i) {
+    //         int group = geneToGroup[selectedStats[i] - 1] - 1;
+    //         cout << group << " ";
+    //     }
+    //
+    //     cout << "\n";
+    // }
+
     return res;
 }
 
 NumericVector calcRandomGseaStatCumulative(
         NumericVector const& stats,
+        IntegerVector const& geneToGroup,
+        IntegerVector const& groupEnds,
         int n,
         int k,
         double gseaParam,
@@ -370,11 +449,13 @@ NumericVector calcRandomGseaStatCumulative(
 ) {
 
     IntegerVector selectedStats = combination(n, k, rng);
-    return calcGseaStatCumulative(stats, selectedStats, gseaParam);
+    return calcGseaStatCumulative(stats, selectedStats, gseaParam, geneToGroup, groupEnds);
 }
 
 List calcGseaStatCumulativeBatch(
         NumericVector const& stats,
+        IntegerVector const& geneToGroup,
+        IntegerVector const& groupEnds,
         double gseaParam,
         NumericVector const& pathwayScores,
         IntegerVector const& pathwaysSizes,
@@ -399,7 +480,7 @@ List calcGseaStatCumulativeBatch(
     std::mt19937 rng(seed);
 
     for (int i = 0; i < iterations; ++i) {
-        NumericVector randEs = calcRandomGseaStatCumulative(stats, n, k, gseaParam, rng);
+        NumericVector randEs = calcRandomGseaStatCumulative(stats, geneToGroup, groupEnds, n, k, gseaParam, rng);
         NumericVector randEsP = subvector(randEs, pathwaysSizes);
 
         aux = randEsP <= pathwayScores;
@@ -441,7 +522,7 @@ NumericVector calcGseaStatBatchCpp(
 
     for (int i = 0; i < m; ++i)  {
         vector<int> S(as<vector<int> >(selectedGenes[i]));
-        for (int j = 0; j < S.size(); ++j) {
+        for (int j = 0; j < (int)S.size(); ++j) {
             S[j] = geneRanks[S[j]-1];
         }
         sort(S.begin(), S.end());
